@@ -4,55 +4,50 @@
 """
 Scores for the first tag in the tagging sequence.
 """
-function preds_first(a::CRF, x)
-    s, f = a.s, a.f
-    sum(s .* f(x), dims=1)
+function preds_first(c::CRF, y)
+    c.W[c.n + 1, onecold(y, 1:length(y))]
+end
+
+"""
+Scores for the last tag in the tagging sequence.
+"""
+function preds_last(c::CRF, y)
+    c.W[onecold(y, 1:length(y)), c.n + 2]
 end
 
 """
 Scores for the tags other than the starting one.
 """
-function preds_single(a::CRF, x)
-    W, b, f = a.W, a.b, a.f
-    reshape(sum(W .* f(x) + b, dims=1), size(a.W,2), :)
+function preds_single(c::CRF, y, y_prev)
+    c.W[onecold(y, 1:length(y)), onecold(y_prev, 1:length(y_prev))]
 end
 
 # Helper for forward pass, returns max_probs and corresponding arg_max for all the labels
 function forward_unit_max(a::CRF, x, prev)
-    preds = preds_single(a, x)
-    n = length(prev)
-
-    max_values = zeros(n)
-    label_indices = zeros(n)
-
-    for j in range(1, step=n, length(preds))
-        i = Int(ceil(j/n))
-        k = exp.(preds[j:j + n - 1]) * prev
-        max_values[i], label_indices[i] = findmax(k.data)
-    end
-
-    return max_values, label_indices
+    p = preds_single(a, x) .+ an
+    m = maximum(p, dims=1)
+    return m, [i[1] for i in indexin(m,p)]
 end
 
 """
 Computes the forward pass for viterbi algorithm.
 """
-function forward_pass(a::CRF, x)
-    n = size(a.s, 1)
-    α_val = preds_first(a, x[1])
-    α_idx = [[onehot(i,1:n) for i in 1:n] for i in 1:length(x)]
+function forward_pass(c::CRF, x)
+    n = length(x)
+    α = preds_first(c, x[1])
+    α_idx = [zeros(Int, size(c.s, 2)) for i in 1:length(x)]
 
-    for i in 2:size(x, 1)
-        α_val, α_idx[i] = forward_unit_max(a, x[i, :], α_val)
+    for i in 2:length(x)
+        α, α_idx[i] = forward_unit_max(c, x[i], α)
     end
 
-    return findmax(α_val)[2], α_idx
+    return findmax(α)[2], α_idx
 end
 
 """
 Computes the backward pass for viterbi algorithm.
 """
-function backward_pass(a::CRF, (α_idx_last, α_idx))
+function backward_pass(α_idx_last, α_idx)
     labels = Array{Flux.OneHotVector, 1}(undef, size(α_idx,1))
     labels[end] = α_idx_last
 
@@ -68,11 +63,11 @@ end
 
 Predicts the most probable label sequence of `input_sequence`.
 """
-function viterbi_decode(a::CRF, x_seq)
+function viterbi_decode(c::CRF, x_seq)
     size(x_seq,1) == 0 && throw("Input sequence is empty")
-    α_star, α_max = backward_pass(a, forward_pass(a, x_seq))
+    α_star, α_max = backward_pass(forward_pass(c, x_seq)...)
 end
 
-function predict(a::CRF, x_seq)
-    viterbi_decode(a, x_seq)
+function predict(c::CRF, x_seq)
+    viterbi_decode(c, x_seq)
 end
