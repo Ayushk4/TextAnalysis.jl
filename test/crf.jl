@@ -5,8 +5,8 @@ Flux.@treelike TextAnalysis.CRF
 
 @testset "crf" begin
     @testset "Loss function" begin
-        input_seq = [rand(3) for i in 1:3]
-        c = TextAnalysis.CRF(2, 3)
+        input_seq = [rand(5) for i in 1:3]
+        c = TextAnalysis.CRF(3)
 
         scores = []
         push!(scores, TextAnalysis.score_sequence(c, input_seq, [onehot(1, 1:2), onehot(1, 1:2), onehot(1, 1:2)]))
